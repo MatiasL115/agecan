@@ -1,0 +1,103 @@
+// prisma/schema.prisma
+
+// Primero definimos la configuración básica
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Modelo para los horarios disponibles
+model TimeSlot {
+  id          String      @id @default(cuid())
+  date        DateTime    // Fecha del horario
+  startTime   String      // Hora de inicio (formato HH:mm)
+  endTime     String      // Hora de fin (formato HH:mm)
+  available   Boolean     @default(true)
+  doctorId    String      // Referencia al doctor
+  doctor      Doctor      @relation(fields: [doctorId], references: [id])
+  appointment Appointment? // Relación con la cita (si está agendado)
+
+  // Índices para búsquedas eficientes
+  @@index([date, available])
+  @@index([doctorId])
+  @@map("time_slots")
+}
+
+// Modelo para las citas
+model Appointment {
+  id                String           @id @default(cuid())
+  slotId           String           @unique  // El horario seleccionado
+  timeSlot         TimeSlot         @relation(fields: [slotId], references: [id])
+  patientId        String           // ID del paciente
+  reason           String           // Motivo de la consulta
+  isFirstVisit     Boolean          @default(false)
+  status           AppointmentStatus @default(scheduled)
+  emergencyContact EmergencyContact? // Contacto de emergencia
+  additionalDetails Json?            // Detalles adicionales como estudios previos
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  notifications    Notification[]    // Notificaciones relacionadas con la cita
+
+  @@index([patientId])
+  @@index([status])
+  @@map("appointments")
+}
+
+// Estados posibles para una cita
+enum AppointmentStatus {
+  scheduled   // Cita agendada
+  confirmed   // Confirmada por el paciente
+  inProgress  // En curso
+  completed   // Finalizada
+  cancelled   // Cancelada
+  missed      // Paciente no asistió
+}
+
+// Modelo para contactos de emergencia
+model EmergencyContact {
+  id            String      @id @default(cuid())
+  appointmentId String      @unique
+  appointment   Appointment @relation(fields: [appointmentId], references: [id])
+  name          String
+  phone         String
+
+  @@map("emergency_contacts")
+}
+
+// Modelo para notificaciones
+model Notification {
+  id           String    @id @default(cuid())
+  type         String    // Tipo de notificación (confirmación, recordatorio, etc)
+  recipientId  String    // ID del destinatario
+  title        String
+  message      String
+  status       String    @default("pending")
+  scheduledFor DateTime? // Para notificaciones programadas
+  sentAt       DateTime? // Cuando se envió la notificación
+  metadata     Json?     // Datos adicionales específicos del tipo
+  appointmentId String?  // Referencia opcional a una cita
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id])
+  createdAt    DateTime  @default(now())
+
+  @@index([recipientId])
+  @@index([status, scheduledFor])
+  @@map("notifications")
+}
+
+// Modelo para doctores
+model Doctor {
+  id          String     @id @default(cuid())
+  name        String
+  specialty   String
+  timeSlots   TimeSlot[] // Sus horarios disponibles
+  active      Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([specialty])
+  @@map("doctors")
+}
